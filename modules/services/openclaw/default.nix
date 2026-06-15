@@ -143,6 +143,14 @@ in
           "/usr/bin"
           "/bin"
         ];
+        defaultText = lib.literalExpression ''
+          [
+            "''${config.home.profileDirectory}/bin"
+            "/run/current-system/sw/bin"
+            "/usr/bin"
+            "/bin"
+          ]
+        '';
         description = ''
           Search path for the OpenClaw gateway service. This controls the
           commands available to the long-running gateway process and any
