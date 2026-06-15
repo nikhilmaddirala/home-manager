@@ -18,7 +18,14 @@ _:
       services.openclaw = {
         enable = true;
         package = fakeOpenclaw;
-        gateway.port = 18789;
+        gateway = {
+          port = 18789;
+          path = [
+            "/custom/bin"
+            "/fallback/bin"
+          ];
+          environment.OPENCLAW_TEST_ENV = "enabled";
+        };
         settings = {
           gateway = {
             port = 18789;
@@ -68,7 +75,9 @@ _:
             serviceFile=$(normalizeStorePaths "$serviceFile")
             assertFileRegex "$serviceFile" '^ExecStart=.*/bin/openclaw gateway run --port 18789 --tailscale off$'
             assertFileRegex "$serviceFile" '^WorkingDirectory=/@TMPDIR@/hm-user$'
+            assertFileRegex "$serviceFile" '^Environment=OPENCLAW_TEST_ENV=enabled PATH=/custom/bin:/fallback/bin$'
             assertFileRegex "$serviceFile" '^Restart=always$'
+            assertFileRegex "$serviceFile" '^RestartSec=5s$'
           ''}
 
           ${lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
@@ -82,6 +91,11 @@ _:
             assertFileRegex "$serviceFile" '<false/>'
             assertFileRegex "$serviceFile" '<key>ProcessType</key>'
             assertFileRegex "$serviceFile" '<string>Background</string>'
+            assertFileRegex "$serviceFile" '<key>EnvironmentVariables</key>'
+            assertFileRegex "$serviceFile" '<key>OPENCLAW_TEST_ENV</key>'
+            assertFileRegex "$serviceFile" '<string>enabled</string>'
+            assertFileRegex "$serviceFile" '<key>PATH</key>'
+            assertFileRegex "$serviceFile" '<string>/custom/bin:/fallback/bin</string>'
             assertFileRegex "$serviceFile" '<key>ProgramArguments</key>'
             assertFileRegex "$serviceFile" '<string>/bin/sh</string>'
             assertFileRegex "$serviceFile" '<string>-c</string>'

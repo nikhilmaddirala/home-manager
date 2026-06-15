@@ -26,6 +26,11 @@ let
     "--tailscale"
     (if cfg.gateway.tailscale then "on" else "off")
   ];
+  gatewayPath = lib.concatStringsSep ":" cfg.gateway.path;
+  gatewayEnvironment = cfg.gateway.environment // {
+    PATH = gatewayPath;
+  };
+  systemdEnvironment = lib.mapAttrsToList (name: value: "${name}=${value}") gatewayEnvironment;
 
   openclawSettingsCommand =
     let
@@ -129,6 +134,37 @@ in
         default = false;
         description = "Whether the gateway should use OpenClaw's built-in Tailscale exposure.";
       };
+
+      path = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [
+          "${config.home.profileDirectory}/bin"
+          "/run/current-system/sw/bin"
+          "/usr/bin"
+          "/bin"
+        ];
+        description = ''
+          Search path for the OpenClaw gateway service. This controls the
+          commands available to the long-running gateway process and any
+          subprocesses it starts.
+        '';
+      };
+
+      environment = lib.mkOption {
+        type = lib.types.attrsOf lib.types.str;
+        default = { };
+        description = ''
+          Environment variables for the OpenClaw gateway service. This is
+          intended for non-secret runtime configuration; use OpenClaw settings
+          or external secret materialization for secrets.
+        '';
+      };
+
+      restartSec = lib.mkOption {
+        type = lib.types.str;
+        default = "5s";
+        description = "Delay before systemd restarts the OpenClaw gateway service.";
+      };
     };
   };
 
@@ -149,12 +185,10 @@ in
       Service = {
         Type = "simple";
         WorkingDirectory = config.home.homeDirectory;
-        Environment = [
-          "PATH=${config.home.profileDirectory}/bin:/run/current-system/sw/bin:/usr/bin:/bin"
-        ];
+        Environment = systemdEnvironment;
         ExecStart = lib.escapeShellArgs gatewayArgs;
         Restart = "always";
-        RestartSec = "10s";
+        RestartSec = cfg.gateway.restartSec;
       };
 
       Install.WantedBy = [ "default.target" ];
@@ -165,6 +199,7 @@ in
       config = {
         ProgramArguments = gatewayArgs;
         WorkingDirectory = config.home.homeDirectory;
+        EnvironmentVariables = gatewayEnvironment;
         KeepAlive = {
           Crashed = true;
           SuccessfulExit = false;

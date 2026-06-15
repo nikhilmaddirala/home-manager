@@ -13,6 +13,11 @@ the OpenClaw package, manages the live OpenClaw JSON settings file, and keeps
 - `services.openclaw.gateway.port` passes `--port` to the gateway command.
 - `services.openclaw.gateway.tailscale` passes `--tailscale on` or
   `--tailscale off` to the gateway command.
+- `services.openclaw.gateway.path` sets the service `PATH` for the gateway and
+  child processes.
+- `services.openclaw.gateway.environment` sets non-secret gateway service
+  environment variables.
+- `services.openclaw.gateway.restartSec` controls the systemd restart delay.
 
 ## Settings
 
