@@ -13,8 +13,18 @@ let
   declaredSettingsFile = jsonFormat.generate "openclaw-declared-settings.json" cfg.settings;
   hasSettings = cfg.settings != { };
   liveConfigPath = "${config.home.homeDirectory}/.openclaw/openclaw.json";
+  gatewayExecutable =
+    if cfg.package != null then
+      "${cfg.package}/bin/openclaw"
+    else
+      "/usr/bin/env";
   gatewayArgs = [
-    "${cfg.package}/bin/openclaw"
+    gatewayExecutable
+  ]
+  ++ lib.optionals (cfg.package == null) [
+    "openclaw"
+  ]
+  ++ [
     "gateway"
     "run"
   ]
@@ -95,7 +105,14 @@ in
   options.services.openclaw = {
     enable = lib.mkEnableOption "OpenClaw gateway user service and runtime files";
 
-    package = lib.mkPackageOption pkgs "openclaw" { };
+    package = lib.mkPackageOption pkgs "openclaw" {
+      nullable = true;
+      extraDescription = ''
+        Set to `null` to skip installing OpenClaw and run `openclaw` from the
+        service PATH instead. This is useful when an external install, such as
+        an npm global package, should provide the executable.
+      '';
+    };
 
     settings = lib.mkOption {
       inherit (jsonFormat) type;

@@ -125,6 +125,122 @@ _:
         '';
     };
 
+  openclaw-external =
+    {
+      config,
+      lib,
+      pkgs,
+      ...
+    }:
+    {
+      services.openclaw = {
+        enable = true;
+        package = null;
+        gateway = {
+          port = 18789;
+          path = [
+            "/custom/bin"
+            "/fallback/bin"
+          ];
+          environment.OPENCLAW_TEST_ENV = "enabled";
+        };
+        settings = {
+          gateway = {
+            port = 18789;
+            bind = "loopback";
+          };
+          runtime.declared = true;
+        };
+      };
+
+      home.homeDirectory = lib.mkForce "/@TMPDIR@/hm-user";
+
+      nmt.script =
+        let
+          preexistingSettings = builtins.toFile "preexisting-openclaw.json" ''
+            {
+              "gateway": {
+                "port": 19999,
+                "runtimeOnly": true
+              },
+              "runtime": {
+                "live": true
+              }
+            }
+          '';
+
+          expectedSettings = builtins.toFile "expected-openclaw.json" ''
+            {
+              "gateway": {
+                "bind": "loopback",
+                "port": 18789,
+                "runtimeOnly": true
+              },
+              "runtime": {
+                "declared": true,
+                "live": true
+              }
+            }
+          '';
+
+          activationScript = pkgs.writeScript "activation" config.home.activation.openclawSettings.data;
+        in
+        ''
+          assertPathNotExists home-path/bin/openclaw
+
+          ${lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+            serviceFile=home-files/.config/systemd/user/openclaw-gateway.service
+            serviceFile=$(normalizeStorePaths "$serviceFile")
+            assertFileRegex "$serviceFile" '^ExecStart=/usr/bin/env openclaw gateway run --port 18789 --tailscale off$'
+            assertFileRegex "$serviceFile" '^WorkingDirectory=/@TMPDIR@/hm-user$'
+            assertFileRegex "$serviceFile" '^Environment=OPENCLAW_TEST_ENV=enabled PATH=/custom/bin:/fallback/bin$'
+            assertFileRegex "$serviceFile" '^Restart=always$'
+            assertFileRegex "$serviceFile" '^RestartSec=5s$'
+          ''}
+
+          ${lib.optionalString pkgs.stdenv.hostPlatform.isDarwin ''
+            serviceFile=LaunchAgents/org.nix-community.home.openclaw-gateway.plist
+            serviceFile=$(normalizeStorePaths "$serviceFile")
+            assertFileRegex "$serviceFile" '<string>org.nix-community.home.openclaw-gateway</string>'
+            assertFileRegex "$serviceFile" '<key>KeepAlive</key>'
+            assertFileRegex "$serviceFile" '<key>Crashed</key>'
+            assertFileRegex "$serviceFile" '<true/>'
+            assertFileRegex "$serviceFile" '<key>SuccessfulExit</key>'
+            assertFileRegex "$serviceFile" '<false/>'
+            assertFileRegex "$serviceFile" '<key>ProcessType</key>'
+            assertFileRegex "$serviceFile" '<string>Background</string>'
+            assertFileRegex "$serviceFile" '<key>EnvironmentVariables</key>'
+            assertFileRegex "$serviceFile" '<key>OPENCLAW_TEST_ENV</key>'
+            assertFileRegex "$serviceFile" '<string>enabled</string>'
+            assertFileRegex "$serviceFile" '<key>PATH</key>'
+            assertFileRegex "$serviceFile" '<string>/custom/bin:/fallback/bin</string>'
+            assertFileRegex "$serviceFile" '<key>ProgramArguments</key>'
+            assertFileRegex "$serviceFile" '<string>/bin/wait4path /nix/store &amp;&amp; exec /usr/bin/env openclaw gateway run --port 18789 --tailscale off</string>'
+            assertFileRegex "$serviceFile" '<key>RunAtLoad</key>'
+            assertFileRegex "$serviceFile" '<key>WorkingDirectory</key>'
+            assertFileRegex "$serviceFile" '<string>/@TMPDIR@/hm-user</string>'
+          ''}
+
+          export HOME=$TMPDIR/hm-user
+          configPath=$HOME/.openclaw/openclaw.json
+
+          mkdir -p "$(dirname "$configPath")"
+          cat ${preexistingSettings} > "$configPath"
+
+          substitute ${activationScript} $TMPDIR/activate --subst-var TMPDIR
+          chmod +x $TMPDIR/activate
+          $TMPDIR/activate
+
+          ${pkgs.jq}/bin/jq -S . "$configPath" > $TMPDIR/actual.json
+          ${pkgs.jq}/bin/jq -S . ${expectedSettings} > $TMPDIR/expected.json
+          assertFileContent $TMPDIR/actual.json $TMPDIR/expected.json
+
+          $TMPDIR/activate
+          ${pkgs.jq}/bin/jq -S . "$configPath" > $TMPDIR/actual-idempotent.json
+          assertFileContent $TMPDIR/actual-idempotent.json $TMPDIR/expected.json
+        '';
+    };
+
   openclaw-immutable-settings =
     {
       config,
